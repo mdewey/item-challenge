@@ -1,0 +1,518 @@
+{
+  "info": {
+    "name": "Item Challenge API",
+    "description": "College Board Exam Item Management System API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "itemId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Item",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('itemId', response.id);",
+              "    pm.test('Item created successfully', function() {",
+              "        pm.expect(response.id).to.be.a('string');",
+              "        pm.expect(response.subject).to.equal('AP Biology');",
+              "    });",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"subject\": \"AP Biology\",\n  \"itemType\": \"multiple-choice\",\n  \"difficulty\": 3,\n  \"content\": {\n    \"question\": \"What is the primary function of mitochondria?\",\n    \"options\": [\n      \"Protein synthesis\",\n      \"Energy production (ATP)\",\n      \"Waste removal\",\n      \"Cell division\"\n    ],\n    \"correctAnswer\": \"Energy production (ATP)\",\n    \"explanation\": \"Mitochondria are the powerhouses of the cell, responsible for producing ATP through cellular respiration.\"\n  },\n  \"metadata\": {\n    \"author\": \"Dr. Jane Smith\",\n    \"status\": \"draft\",\n    \"tags\": [\"biology\", \"cell-biology\", \"mitochondria\"]\n  },\n  \"securityLevel\": \"standard\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/items",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Item",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Item retrieved successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.id).to.be.a('string');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items",
+            "{{itemId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Item",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Item updated successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.difficulty).to.equal(4);",
+              "    pm.expect(response.metadata.status).to.equal('review');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"difficulty\": 4,\n  \"metadata\": {\n    \"status\": \"review\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items",
+            "{{itemId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List Items",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Items listed successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.items).to.be.an('array');",
+              "    pm.expect(response.total).to.be.a('number');",
+              "    pm.expect(response.limit).to.be.a('number');",
+              "    pm.expect(response.offset).to.be.a('number');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/items",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List Items (with filters)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Filtered items listed successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.items).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/items?subject=AP Biology&status=review&limit=10&offset=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items"
+          ],
+          "query": [
+            {
+              "key": "subject",
+              "value": "AP Biology"
+            },
+            {
+              "key": "status",
+              "value": "review"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Version",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Version created successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(201);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.metadata.version).to.be.at.least(2);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/items/{{itemId}}/versions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items",
+            "{{itemId}}",
+            "versions"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Audit Trail",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Audit trail retrieved successfully', function() {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.itemId).to.be.a('string');",
+              "    pm.expect(response.versions).to.be.an('array');",
+              "    pm.expect(response.total).to.be.a('number');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/items/{{itemId}}/audit",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "items",
+            "{{itemId}}",
+            "audit"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "Get Item - Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 404 for non-existent item', function() {",
+                  "    pm.expect(pm.response.code).to.equal(404);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.equal('Item not found');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Item - Invalid UUID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 400 for invalid UUID', function() {",
+                  "    pm.expect(pm.response.code).to.equal(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('Invalid item ID');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items/not-a-uuid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "not-a-uuid"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Item - Validation Error",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 400 for validation errors', function() {",
+                  "    pm.expect(pm.response.code).to.equal(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.equal('Validation failed');",
+                  "    pm.expect(response.details).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"\",\n  \"itemType\": \"invalid-type\",\n  \"difficulty\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Item - Empty Body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 400 for empty update', function() {",
+                  "    pm.expect(pm.response.code).to.equal(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.include('At least one field');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Items - Invalid Limit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 400 for invalid limit', function() {",
+                  "    pm.expect(pm.response.code).to.equal(400);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.error).to.equal('Validation failed');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items?limit=999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "999"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

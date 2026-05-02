@@ -10,6 +10,11 @@ import { logger } from 'hono/logger';
 import { swaggerUI } from '@hono/swagger-ui';
 import { randomUUID } from 'crypto';
 import { getItemHandler } from './handlers/getItem.js';
+import { createItemHandler } from './handlers/createItem.js';
+import { updateItemHandler } from './handlers/updateItem.js';
+import { listItemsHandler } from './handlers/listItems.js';
+import { createVersionHandler } from './handlers/createVersion.js';
+import { getAuditTrailHandler } from './handlers/getAuditTrail.js';
 import { createHandlerContext } from './context.js';
 import { logger as appLogger } from './utils/logger.js';
 import { openApiSpec } from './openapi.js';
@@ -37,15 +42,41 @@ app.use('*', async (c, next) => {
 app.get('/api/items/:id', async (c) => {
   const ctx = createHandlerContext(c.get('requestId'));
   const result = await getItemHandler(c.req.param('id'), ctx);
-  return c.json(result.body, result.statusCode as any);
+  return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
 });
 
-// TODO: Add more routes as handlers are implemented
-// app.post('/api/items', async (c) => { ... });
-// app.put('/api/items/:id', async (c) => { ... });
-// app.get('/api/items', async (c) => { ... });
-// app.post('/api/items/:id/versions', async (c) => { ... });
-// app.get('/api/items/:id/audit', async (c) => { ... });
+app.post('/api/items', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const body: unknown = await c.req.json();
+  const result = await createItemHandler(body, ctx);
+  return c.json(result.body, result.statusCode as 200 | 201 | 400 | 404 | 500);
+});
+
+app.put('/api/items/:id', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const body: unknown = await c.req.json();
+  const result = await updateItemHandler(c.req.param('id'), body, ctx);
+  return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
+});
+
+app.get('/api/items', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const query = c.req.query();
+  const result = await listItemsHandler(query, ctx);
+  return c.json(result.body, result.statusCode as 200 | 400 | 500);
+});
+
+app.post('/api/items/:id/versions', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const result = await createVersionHandler(c.req.param('id'), ctx);
+  return c.json(result.body, result.statusCode as 201 | 400 | 404 | 500);
+});
+
+app.get('/api/items/:id/audit', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const result = await getAuditTrailHandler(c.req.param('id'), ctx);
+  return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
+});
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));

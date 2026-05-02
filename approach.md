@@ -88,8 +88,18 @@ vi.mock('../storage/index.js', () => ({
 
 - ✅ Success case (200 with item)
 - ✅ Not found (404)
-- ✅ Invalid ID validation (400 for empty/null/whitespace)
+- ✅ Invalid ID validation (400 for empty/null/non-UUID)
 - ✅ Storage errors (500 + logging)
+
+### Test Pattern
+
+All handlers follow the same coverage pattern:
+
+- ID/input validation (400 cases)
+- Success cases (200/201)
+- Not found (404)
+- Storage errors (500)
+- Logging behavior
 
 ---
 
@@ -118,10 +128,13 @@ vi.mock('../storage/index.js', () => ({
 - Great TypeScript support
 
 ```typescript
-app.get('/api/items/:id', async (c) => {
-  const result = await getItemHandler(c.req.param('id'));
-  return c.json(result.body, result.statusCode);
-});
+// All 6 endpoints wired up
+app.get('/api/items/:id', ...)      // getItemHandler
+app.post('/api/items', ...)         // createItemHandler
+app.put('/api/items/:id', ...)      // updateItemHandler
+app.get('/api/items', ...)          // listItemsHandler
+app.post('/api/items/:id/versions', ...) // createVersionHandler
+app.get('/api/items/:id/audit', ...) // getAuditTrailHandler
 ```
 
 ---
@@ -276,7 +289,8 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 - `itemIdSchema` - UUID validation for item IDs
 - `createItemRequestSchema` - Full validation for POST /api/items
 - `updateItemRequestSchema` - Partial validation for PUT /api/items/:id
-- Enums: `itemTypeSchema`, `securityLevelSchema`, `statusSchema`
+- `listItemsQuerySchema` - Query params for GET /api/items (limit, offset, subject, status)
+- Enums: `itemTypeSchema`, `securityLevelSchema`, `itemStatusSchema`
 
 ---
 
@@ -284,7 +298,7 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 
 ### Decision: Static OpenAPI Spec
 
-**Approach:** Maintain a simple, static OpenAPI 3.0 spec in `src/openapi.ts` served at `/openapi.json` and `/docs`.
+**Approach:** Maintain a complete, static OpenAPI 3.1 spec in `src/openapi.ts` served at `/openapi.json` and `/docs`.
 
 **Options Considered:**
 
@@ -296,10 +310,18 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 
 **Why static over auto-generated:**
 
-- **Simplicity**: ~60 lines vs complex decorator chains
+- **Control**: Full control over documentation quality
 - **Maintainability**: Easy to read and update
 - **No coupling**: Schema changes don't require OpenAPI decorator updates
-- **Take-home scope**: Auto-generation is overkill for 5 endpoints
+- **Complete**: All 6 endpoints with request/response schemas
+
+**Spec includes:**
+
+- All 6 API endpoints + health check
+- Component schemas: `ExamItem`, `CreateItemRequest`, `UpdateItemRequest`, `ListItemsResponse`, `AuditTrailResponse`
+- Error schemas: `Error`, `ValidationError`
+- Tags for grouping: Items, Versioning, System
+- Full parameter documentation (path, query)
 
 **Trade-off accepted:** Manual sync between Zod schemas and OpenAPI. For a small API, this is manageable.
 
@@ -331,9 +353,94 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 
 - Lambda function with Node.js 20 runtime
 - API Gateway HTTP API (v2)
-- DynamoDB table with GSI for status queries
+- DynamoDB table with composite key + 2 GSIs
 - IAM roles and policies (least privilege)
 - CloudWatch log group with retention
+
+---
+
+## DynamoDB Schema Design
+
+### Decision: Single Table with Composite Key
+
+**Approach:** Store items and their version history in one table using a composite primary key (PK + SK).
+
+**Table Structure:**
+
+```
+PK (Partition Key)     SK (Sort Key)        Data
+──────────────────────────────────────────────────────
+ITEM#<uuid>            CURRENT              Current item state
+ITEM#<uuid>            VERSION#00001        Snapshot at version 1
+ITEM#<uuid>            VERSION#00002        Snapshot at version 2
+```
+
+**Why composite key:**
+
+- `getItem(id)` → Single read: `PK = ITEM#id, SK = CURRENT`
+- `getAuditTrail(id)` → Query: `PK = ITEM#id, SK begins_with VERSION#`
+- Versions are naturally sorted (zero-padded for lexicographic order)
+- No separate versions table needed
+
+**GSI Strategy:**
+
+| GSI          | PK      | SK         | Purpose                                      |
+| ------------ | ------- | ---------- | -------------------------------------------- |
+| SubjectIndex | subject | status#id  | List by subject, optionally filter by status |
+| StatusIndex  | status  | subject#id | List by status alone                         |
+
+**Access patterns mapped:**
+
+| Handler Query                  | DynamoDB Operation                           |
+| ------------------------------ | -------------------------------------------- |
+| `getItem(id)`                  | GetItem: `PK=ITEM#id, SK=CURRENT`            |
+| `updateItem(id)`               | UpdateItem + PutItem (version record)        |
+| `createVersion(id)`            | UpdateItem + PutItem (version record)        |
+| `getAuditTrail(id)`            | Query: `PK=ITEM#id, SK begins_with VERSION#` |
+| `listItems({subject})`         | Query SubjectIndex                           |
+| `listItems({status})`          | Query StatusIndex                            |
+| `listItems({subject, status})` | Query SubjectIndex with SK prefix            |
+
+**GSI Consistency:**
+
+- GSIs are **eventually consistent** (milliseconds lag)
+- Main table supports strong consistency for `getItem`
+- Acceptable for item management (not real-time critical)
+
+**Write amplification:**
+
+- Each write to main table auto-updates both GSIs
+- 1 item write = 3 WCUs (main + GSI1 + GSI2)
+- Acceptable for low-write item bank (~hundreds of writes/day)
+
+**Scale analysis:**
+
+- Item bank: ~50K-200K items (not millions)
+- Hot partition risk: None (largest partition ~5K items)
+- DynamoDB handles 3,000 RCU per partition
+
+**Implementation scope:**
+
+The `DynamoDBStorage` class is intentionally **not implemented**. The Terraform schema + `ItemStorage` interface demonstrate production-readiness:
+
+- **Interface proves swappability**: `MemoryStorage` implements `ItemStorage`, a future `DynamoDBStorage` would too
+- **Schema design complete**: Terraform defines composite keys, GSIs, and access patterns
+- **Tests run fast**: 104 unit tests against in-memory storage complete in seconds
+- **No added value**: The actual implementation is ~100 lines of AWS SDK boilerplate
+
+The implementation would be straightforward:
+
+```typescript
+async getItem(id: string): Promise<ExamItem | null> {
+  const result = await docClient.get({
+    TableName: TABLE_NAME,
+    Key: { pk: `ITEM#${id}`, sk: 'CURRENT' }
+  });
+  return result.Item as ExamItem ?? null;
+}
+```
+
+Adding it would require LocalStack setup for meaningful testing, which adds complexity without demonstrating additional skills.
 
 ---
 
@@ -401,8 +508,6 @@ git remote -v
 # upstream  git@github.com:ascott1/item-challenge.git (fetch)
 ```
 
-**Branch strategy:** `solution/dewey-mark-may-2026`
-
 **Why:**
 
 - **Clean separation**: Original repo untouched
@@ -411,28 +516,178 @@ git remote -v
 
 ---
 
+## Shared Test Utilities
+
+### Decision: Centralized Test Helpers
+
+**Approach:** Created `src/__tests__/helpers/testUtils.ts` with shared mocks, fixtures, and type helpers.
+
+```typescript
+// Semantic aliases for readability
+export const EXISTING_ITEM_ID = TEST_UUID;
+export const NOT_FOUND_ITEM_ID = TEST_UUID_2;
+
+// Factory functions
+export function createMockStorage(): ItemStorage { ... }
+export function createMockLogger() { ... }
+export function createTestContext(storage?: Partial<ItemStorage>): HandlerContext { ... }
+export function createMockItem(overrides?: Partial<ExamItem>): ExamItem { ... }
+```
+
+**Why:**
+
+- **DRY**: Same mocks used across all handler tests
+- **Readable**: `NOT_FOUND_ITEM_ID` is clearer than a raw UUID
+- **Flexible**: `createTestContext({ getItem: vi.fn().mockResolvedValue(item) })`
+- **Type-safe**: All helpers return properly typed objects
+
+---
+
+## Test Statistics
+
+**Total:** 104 tests across 7 test files
+
+| Handler          | Tests |
+| ---------------- | ----- |
+| getItem          | 11    |
+| createItem       | 18    |
+| updateItem       | 22    |
+| listItems        | 22    |
+| createVersion    | 14    |
+| getAuditTrail    | 14    |
+| example (sanity) | 3     |
+
+**Coverage areas:**
+
+- Input validation (ID format, body schema)
+- Success cases
+- Not found (404)
+- Storage errors (500)
+- Logging behavior
+- Partial updates
+- Pagination and filtering
+
+---
+
+## API Testing
+
+### Decision: Postman Collection
+
+**Approach:** Created `postman/item-challenge-api.postman_collection.json` for manual API testing.
+
+**Features:**
+
+- All 6 endpoints + health check
+- Auto-captures `itemId` from create response
+- Test scripts that validate responses
+- Error case folder (404, 400, invalid UUID)
+- Configurable `baseUrl` variable
+
+**Why:**
+
+- **Quick validation**: Test endpoints without writing code
+- **Shareable**: Other developers can import and use
+- **Documented**: Collection serves as API examples
+- **CI-ready**: Can run with Newman for integration tests
+
 ## Next Steps
-
-### Immediate (Handler Implementation)
-
-- [ ] POST /api/items (createItem)
-- [ ] PUT /api/items/:id (updateItem)
-- [ ] GET /api/items (listItems)
 
 ### Future Enhancements
 
 - [ ] Integration tests using `app.request()`
-- [ ] POST /api/items/:id/versions (versioning)
-- [ ] GET /api/items/:id/audit (audit trail)
-- [ ] DynamoDB storage implementation
+- [ ] DynamoDB storage class implementation (schema designed, Terraform ready)
 - [ ] Deployment automation (GitHub Actions → AWS)
+- [ ] Rate limiting / throttling
+
+### Production Readiness (Beyond Scope)
+
+The following would be added for a production deployment:
+
+#### 1. Observability
+
+- **AWS X-Ray tracing** - End-to-end request tracing across Lambda → DynamoDB
+- **Structured logging** - JSON logs with correlation IDs, not console.log
+- **CloudWatch dashboards** - Latency percentiles (p50, p95, p99), error rates
+- **Alarms** - Alert on error rate > 1%, latency p99 > 1s
+
+```typescript
+// Example: Structured log format
+logger.info({ 
+  requestId: ctx.requestId,
+  itemId: id,
+  action: 'getItem',
+  durationMs: 42
+});
+```
+
+#### 2. Error Taxonomy
+
+- **Centralized error codes** - `ITEM_NOT_FOUND`, `VALIDATION_FAILED`, `CONFLICT`
+- **Consistent error shape** - All errors return same structure
+- **Error catalog** - Document all error codes for API consumers
+
+```typescript
+// Example: Standardized error response
+{
+  "error": {
+    "code": "ITEM_NOT_FOUND",
+    "message": "Item with ID xyz does not exist",
+    "requestId": "abc-123"
+  }
+}
+```
+
+#### 3. Cost Analysis
+
+Estimated monthly cost for expected load (~1000 items, 10K requests/day):
+
+| Resource    | Estimate       | Notes                           |
+| ----------- | -------------- | ------------------------------- |
+| Lambda      | ~$1-5/month    | 300K invocations, 256MB, <100ms |
+| API Gateway | ~$3/month      | 300K requests @ $1/million      |
+| DynamoDB    | ~$5-10/month   | On-demand, <1KB items           |
+| CloudWatch  | ~$2/month      | Logs + basic metrics            |
+| **Total**   | **~$15/month** | Scales linearly with traffic    |
+
+At SAT scale (millions of requests), costs would be ~$500-1000/month.
+
+#### 4. Runbook Hints
+
+**What to monitor:**
+
+- Lambda error rate and duration
+- DynamoDB consumed capacity (throttling risk)
+- API Gateway 4xx/5xx rates
+
+**Common issues:**
+
+- Cold starts → Enable provisioned concurrency for consistent latency
+- Throttling → Check DynamoDB capacity, consider provisioned mode
+- Timeouts → Check for missing GSI on query patterns
+
+**Debugging in prod:**
+
+- Use X-Ray trace ID from error response
+- Query CloudWatch Logs Insights by requestId
+- Check DynamoDB consumed capacity in CloudWatch
 
 ### Completed
 
-- [x] GET /api/items/:id handler with tests
+- [x] GET /api/items/:id handler with tests (11 tests)
+- [x] POST /api/items handler with tests (18 tests)
+- [x] PUT /api/items/:id handler with tests (22 tests)
+- [x] GET /api/items handler with tests (22 tests)
+- [x] POST /api/items/:id/versions handler with tests (14 tests)
+- [x] GET /api/items/:id/audit handler with tests (14 tests)
 - [x] Zod validation schemas
 - [x] Terraform infrastructure
 - [x] CI/CD pipeline
 - [x] Format on commit
 - [x] Branch protection
 - [x] ARCHITECTURE.md documentation
+- [x] Shared test utilities (`testUtils.ts`)
+- [x] Postman collection for manual testing
+- [x] OpenAPI spec with all endpoints and schemas
+- [x] DynamoDB schema design (composite PK/SK + 2 GSIs)
+
+---

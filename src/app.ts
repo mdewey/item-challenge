@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { getItemHandler } from './handlers/getItem.js';
 import { createItemHandler } from './handlers/createItem.js';
 import { updateItemHandler } from './handlers/updateItem.js';
+import { listItemsHandler } from './handlers/listItems.js';
 import { createHandlerContext } from './context.js';
 import { logger as appLogger } from './utils/logger.js';
 import { openApiSpec } from './openapi.js';
@@ -56,8 +57,14 @@ app.put('/api/items/:id', async (c) => {
   return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
 });
 
+app.get('/api/items', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const query = c.req.query();
+  const result = await listItemsHandler(query, ctx);
+  return c.json(result.body, result.statusCode as 200 | 400 | 500);
+});
+
 // TODO: Add more routes as handlers are implemented
-// app.get('/api/items', async (c) => { ... });
 // app.post('/api/items/:id/versions', async (c) => { ... });
 // app.get('/api/items/:id/audit', async (c) => { ... });
 

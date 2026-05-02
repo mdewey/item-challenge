@@ -59,6 +59,21 @@ export const updateItemRequestSchema = z.object({
   securityLevel: securityLevelSchema.optional(),
 });
 
+export const listItemsQuerySchema = z.object({
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 10))
+    .pipe(z.number().int().min(1).max(100)),
+  offset: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 0))
+    .pipe(z.number().int().min(0)),
+  subject: z.string().min(1).optional(),
+  status: itemStatusSchema.optional(),
+});
+
 // ============================================
 // Helpers
 // ============================================
@@ -84,3 +99,4 @@ export type ItemContent = z.infer<typeof itemContentSchema>;
 export type ItemMetadata = z.infer<typeof itemMetadataSchema>;
 export type CreateItemRequest = z.infer<typeof createItemRequestSchema>;
 export type UpdateItemRequest = z.infer<typeof updateItemRequestSchema>;
+export type ListItemsQueryParams = z.infer<typeof listItemsQuerySchema>;

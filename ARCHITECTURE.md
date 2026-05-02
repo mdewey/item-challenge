@@ -36,21 +36,38 @@ This is a serverless exam item management API built with TypeScript, deployed to
 
 **Table: `{project}-items-{env}`**
 
-| Key Type           | Attribute | Purpose                          |
-| ------------------ | --------- | -------------------------------- |
-| Partition Key      | `id`      | UUID - ensures even distribution |
-| GSI: subject-index | `subject` | Query items by subject area      |
-| GSI: status-index  | `status`  | Query items by workflow status   |
+Single-table design with composite primary key for items and version history:
+
+| Key Type      | Attribute | Example Value                | Purpose                   |
+| ------------- | --------- | ---------------------------- | ------------------------- |
+| Partition Key | `pk`      | `ITEM#<uuid>`                | Groups item + versions    |
+| Sort Key      | `sk`      | `CURRENT` or `VERSION#00001` | Distinguishes record type |
+
+**GSI Strategy:**
+
+| GSI          | PK        | SK (gsi1sk/gsi2sk) | Purpose                           |
+| ------------ | --------- | ------------------ | --------------------------------- |
+| SubjectIndex | `subject` | `status#id`        | List by subject, filter by status |
+| StatusIndex  | `status`  | `subject#id`       | List by status, filter by subject |
 
 **Access Patterns:**
 
-- Get item by ID → Direct lookup via partition key
-- List items by subject → Query `subject-index`
-- List items by status → Query `status-index`
-- Pagination → Use `Limit` and `ExclusiveStartKey`
+| Operation                      | DynamoDB Query                                          |
+| ------------------------------ | ------------------------------------------------------- |
+| Get item by ID                 | GetItem: `pk=ITEM#id, sk=CURRENT`                       |
+| Get audit trail                | Query: `pk=ITEM#id, sk begins_with VERSION#`            |
+| List items by subject          | Query SubjectIndex: `subject=X`                         |
+| List items by status           | Query StatusIndex: `status=X`                           |
+| List items by subject + status | Query SubjectIndex: `subject=X, sk begins_with status#` |
+| Pagination                     | Use `Limit` and `ExclusiveStartKey`                     |
 
 **Versioning Strategy:**
-For audit trail, store versions in a separate table or use a composite sort key (`id#version`). Current implementation uses in-memory storage; DynamoDB implementation would add a `version` sort key.
+
+Each item update creates a version snapshot in the same table:
+
+- Current state: `pk=ITEM#id, sk=CURRENT`
+- Version history: `pk=ITEM#id, sk=VERSION#00001`, `VERSION#00002`, etc.
+- Zero-padded version numbers ensure lexicographic sorting
 
 ## Infrastructure
 
@@ -135,9 +152,43 @@ src/
 | **Logging**    | Request IDs for tracing, no sensitive data logged |
 | **CORS**       | Configured in Hono middleware                     |
 
-**Not Implemented (would add for production):**
+### Authentication (Not Implemented)
 
-- Authentication (Cognito, API keys, or JWT)
+**Recommendation:** API Gateway JWT Authorizer
+
+| Option             | Verdict                                     |
+| ------------------ | ------------------------------------------- |
+| Cognito            | ❌ Overkill if existing IdP (Okta, Azure AD) |
+| API Keys           | ❌ No user identity, hard to revoke          |
+| Lambda Authorizer  | ❌ Custom code to maintain                   |
+| IAM Auth           | ❌ Only for AWS service-to-service           |
+| **JWT Authorizer** | ✅ Works with any OIDC provider              |
+
+**Why JWT:**
+
+- **Stateless** - No database lookup per request
+- **Vendor-agnostic** - Works with Okta, Azure AD, Auth0, Cognito
+- **Zero code** - API Gateway validates signature, expiry, audience
+- **Claims available** - Lambda receives user info via `event.requestContext.authorizer.jwt.claims`
+
+**Implementation (add to api_gateway.tf):**
+
+```hcl
+resource "aws_apigatewayv2_authorizer" "jwt" {
+  api_id           = aws_apigatewayv2_api.main.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "jwt-authorizer"
+
+  jwt_configuration {
+    issuer   = var.jwt_issuer   # e.g., "https://your-idp.com/"
+    audience = [var.jwt_audience]
+  }
+}
+```
+
+**Other production additions:**
+
 - Rate limiting per client
 - WAF rules
 - VPC isolation for DynamoDB

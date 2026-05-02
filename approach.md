@@ -280,10 +280,159 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 
 ---
 
+## API Documentation
+
+### Decision: Static OpenAPI Spec
+
+**Approach:** Maintain a simple, static OpenAPI 3.0 spec in `src/openapi.ts` served at `/openapi.json` and `/docs`.
+
+**Options Considered:**
+
+| Approach          | Verdict                 |
+| ----------------- | ----------------------- |
+| zod-to-openapi    | ❌ Too complex for scope |
+| Hand-written spec | ✅ Chosen                |
+| No documentation  | ❌ API needs docs        |
+
+**Why static over auto-generated:**
+
+- **Simplicity**: ~60 lines vs complex decorator chains
+- **Maintainability**: Easy to read and update
+- **No coupling**: Schema changes don't require OpenAPI decorator updates
+- **Take-home scope**: Auto-generation is overkill for 5 endpoints
+
+**Trade-off accepted:** Manual sync between Zod schemas and OpenAPI. For a small API, this is manageable.
+
+---
+
+## Infrastructure
+
+### Decision: Terraform over CDK
+
+**Approach:** AWS infrastructure defined in `terraform/` using HCL.
+
+**Options Considered:**
+
+| Tool      | Verdict                                      |
+| --------- | -------------------------------------------- |
+| AWS CDK   | ❌ Adds TypeScript complexity, longer deploys |
+| Terraform | ✅ Chosen                                     |
+| SAM       | ❌ AWS-specific, less flexible                |
+| Pulumi    | ❌ Overkill for this scope                    |
+
+**Why Terraform:**
+
+- **Industry standard**: Most teams use Terraform
+- **Declarative**: Easy to review infrastructure changes
+- **State management**: Clear view of what's deployed
+- **Portable**: Skills transfer to any cloud
+
+**Resources defined:**
+
+- Lambda function with Node.js 20 runtime
+- API Gateway HTTP API (v2)
+- DynamoDB table with GSI for status queries
+- IAM roles and policies (least privilege)
+- CloudWatch log group with retention
+
+---
+
+## CI/CD Pipeline
+
+### Decision: GitHub Actions with Branch Protection
+
+**Approach:** Three-job pipeline in `.github/workflows/ci.yml`:
+
+1. **Lint & Test** - ESLint, Prettier check, Vitest with coverage
+2. **Build Lambda** - esbuild bundle, artifact upload
+3. **Validate Terraform** - `terraform fmt -check`, `terraform validate`
+
+**Triggers:**
+
+- Push to `main` or `solution/**` branches
+- Pull requests targeting `main`
+
+**Branch protection rules:**
+
+- All three checks must pass before merge
+- Conversations must be resolved
+- Linear history enforced (no merge commits)
+
+**Why this setup:**
+
+- **Fast feedback**: Parallel jobs complete in ~30 seconds
+- **Quality gate**: Can't merge broken code
+- **Artifacts**: Lambda bundle ready for deployment
+- **IaC validation**: Catch Terraform errors before apply
+
+---
+
+## Code Quality
+
+### Decision: Format on Commit
+
+**Approach:** Husky + lint-staged auto-formats on every commit.
+
+```json
+"lint-staged": {
+  "src/**/*.ts": ["prettier --write", "eslint --fix"],
+  "terraform/*.tf": ["terraform fmt"]
+}
+```
+
+**Why:**
+
+- **Consistency**: No formatting debates in PRs
+- **Zero friction**: Happens automatically
+- **CI match**: Local format matches CI check
+- **Terraform too**: HCL files stay formatted
+
+---
+
+## Git Workflow
+
+### Decision: Fork-Based Development
+
+**Approach:** Work on a fork (`mdewey/item-challenge`) with upstream tracking.
+
+```bash
+git remote -v
+# origin    git@github.com:mdewey/item-challenge.git (push)
+# upstream  git@github.com:ascott1/item-challenge.git (fetch)
+```
+
+**Branch strategy:** `solution/dewey-mark-may-2026`
+
+**Why:**
+
+- **Clean separation**: Original repo untouched
+- **PR ready**: Can open PR from fork to upstream
+- **Standard pattern**: How most open source works
+
+---
+
 ## Next Steps
 
-- [ ] Create remaining handlers (createItem, updateItem, listItems, createVersion, getAuditTrail)
-- [x] Add Zod validation
-- [ ] Wire up all routes in server.ts
-- [ ] Infrastructure as Code (CDK)
-- [ ] Complete ARCHITECTURE.md
+### Immediate (Handler Implementation)
+
+- [ ] POST /api/items (createItem)
+- [ ] PUT /api/items/:id (updateItem)
+- [ ] GET /api/items (listItems)
+
+### Future Enhancements
+
+- [ ] Integration tests using `app.request()`
+- [ ] POST /api/items/:id/versions (versioning)
+- [ ] GET /api/items/:id/audit (audit trail)
+- [ ] DynamoDB storage implementation
+- [ ] Deployment automation (GitHub Actions → AWS)
+
+### Completed
+
+- [x] GET /api/items/:id handler with tests
+- [x] Zod validation schemas
+- [x] Terraform infrastructure
+- [x] CI/CD pipeline
+- [x] Format on commit
+- [x] Branch protection
+- [x] ARCHITECTURE.md documentation

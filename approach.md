@@ -88,8 +88,17 @@ vi.mock('../storage/index.js', () => ({
 
 - ✅ Success case (200 with item)
 - ✅ Not found (404)
-- ✅ Invalid ID validation (400 for empty/null/whitespace)
+- ✅ Invalid ID validation (400 for empty/null/non-UUID)
 - ✅ Storage errors (500 + logging)
+
+### Test Pattern
+
+All handlers follow the same coverage pattern:
+- ID/input validation (400 cases)
+- Success cases (200/201)
+- Not found (404)
+- Storage errors (500)
+- Logging behavior
 
 ---
 
@@ -118,10 +127,13 @@ vi.mock('../storage/index.js', () => ({
 - Great TypeScript support
 
 ```typescript
-app.get('/api/items/:id', async (c) => {
-  const result = await getItemHandler(c.req.param('id'));
-  return c.json(result.body, result.statusCode);
-});
+// All 6 endpoints wired up
+app.get('/api/items/:id', ...)      // getItemHandler
+app.post('/api/items', ...)         // createItemHandler
+app.put('/api/items/:id', ...)      // updateItemHandler
+app.get('/api/items', ...)          // listItemsHandler
+app.post('/api/items/:id/versions', ...) // createVersionHandler
+app.get('/api/items/:id/audit', ...) // getAuditTrailHandler
 ```
 
 ---
@@ -276,7 +288,8 @@ export async function getItemHandler(id: unknown, ctx: HandlerContext): Promise<
 - `itemIdSchema` - UUID validation for item IDs
 - `createItemRequestSchema` - Full validation for POST /api/items
 - `updateItemRequestSchema` - Partial validation for PUT /api/items/:id
-- Enums: `itemTypeSchema`, `securityLevelSchema`, `statusSchema`
+- `listItemsQuerySchema` - Query params for GET /api/items (limit, offset, subject, status)
+- Enums: `itemTypeSchema`, `securityLevelSchema`, `itemStatusSchema`
 
 ---
 
@@ -411,26 +424,102 @@ git remote -v
 
 ## Next Steps
 
-### Immediate (Handler Implementation)
-
-- [ ] POST /api/items (createItem)
-- [ ] PUT /api/items/:id (updateItem)
-- [ ] GET /api/items (listItems)
-
 ### Future Enhancements
 
 - [ ] Integration tests using `app.request()`
-- [ ] POST /api/items/:id/versions (versioning)
-- [ ] GET /api/items/:id/audit (audit trail)
 - [ ] DynamoDB storage implementation
 - [ ] Deployment automation (GitHub Actions → AWS)
+- [ ] OpenAPI spec update to match all endpoints
+- [ ] Rate limiting / throttling
 
 ### Completed
 
-- [x] GET /api/items/:id handler with tests
+- [x] GET /api/items/:id handler with tests (11 tests)
+- [x] POST /api/items handler with tests (18 tests)
+- [x] PUT /api/items/:id handler with tests (22 tests)
+- [x] GET /api/items handler with tests (22 tests)
+- [x] POST /api/items/:id/versions handler with tests (14 tests)
+- [x] GET /api/items/:id/audit handler with tests (14 tests)
 - [x] Zod validation schemas
 - [x] Terraform infrastructure
 - [x] CI/CD pipeline
 - [x] Format on commit
 - [x] Branch protection
 - [x] ARCHITECTURE.md documentation
+- [x] Shared test utilities (`testUtils.ts`)
+- [x] Postman collection for manual testing
+
+---
+
+## Shared Test Utilities
+
+### Decision: Centralized Test Helpers
+
+**Approach:** Created `src/__tests__/helpers/testUtils.ts` with shared mocks, fixtures, and type helpers.
+
+```typescript
+// Semantic aliases for readability
+export const EXISTING_ITEM_ID = TEST_UUID;
+export const NOT_FOUND_ITEM_ID = TEST_UUID_2;
+
+// Factory functions
+export function createMockStorage(): ItemStorage { ... }
+export function createMockLogger() { ... }
+export function createTestContext(storage?: Partial<ItemStorage>): HandlerContext { ... }
+export function createMockItem(overrides?: Partial<ExamItem>): ExamItem { ... }
+```
+
+**Why:**
+
+- **DRY**: Same mocks used across all handler tests
+- **Readable**: `NOT_FOUND_ITEM_ID` is clearer than a raw UUID
+- **Flexible**: `createTestContext({ getItem: vi.fn().mockResolvedValue(item) })`
+- **Type-safe**: All helpers return properly typed objects
+
+---
+
+## Test Statistics
+
+**Total:** 104 tests across 7 test files
+
+| Handler          | Tests |
+| ---------------- | ----- |
+| getItem          | 11    |
+| createItem       | 18    |
+| updateItem       | 22    |
+| listItems        | 22    |
+| createVersion    | 14    |
+| getAuditTrail    | 14    |
+| example (sanity) | 3     |
+
+**Coverage areas:**
+- Input validation (ID format, body schema)
+- Success cases
+- Not found (404)
+- Storage errors (500)
+- Logging behavior
+- Partial updates
+- Pagination and filtering
+
+---
+
+## API Testing
+
+### Decision: Postman Collection
+
+**Approach:** Created `postman/item-challenge-api.postman_collection.json` for manual API testing.
+
+**Features:**
+
+- All 6 endpoints + health check
+- Auto-captures `itemId` from create response
+- Test scripts that validate responses
+- Error case folder (404, 400, invalid UUID)
+- Configurable `baseUrl` variable
+
+**Why:**
+
+- **Quick validation**: Test endpoints without writing code
+- **Shareable**: Other developers can import and use
+- **Documented**: Collection serves as API examples
+- **CI-ready**: Can run with Newman for integration tests

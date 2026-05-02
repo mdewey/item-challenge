@@ -10,6 +10,7 @@ import { logger } from 'hono/logger';
 import { swaggerUI } from '@hono/swagger-ui';
 import { randomUUID } from 'crypto';
 import { getItemHandler } from './handlers/getItem.js';
+import { createItemHandler } from './handlers/createItem.js';
 import { createHandlerContext } from './context.js';
 import { logger as appLogger } from './utils/logger.js';
 import { openApiSpec } from './openapi.js';
@@ -37,11 +38,17 @@ app.use('*', async (c, next) => {
 app.get('/api/items/:id', async (c) => {
   const ctx = createHandlerContext(c.get('requestId'));
   const result = await getItemHandler(c.req.param('id'), ctx);
-  return c.json(result.body, result.statusCode as any);
+  return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
+});
+
+app.post('/api/items', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const body: unknown = await c.req.json();
+  const result = await createItemHandler(body, ctx);
+  return c.json(result.body, result.statusCode as 200 | 201 | 400 | 404 | 500);
 });
 
 // TODO: Add more routes as handlers are implemented
-// app.post('/api/items', async (c) => { ... });
 // app.put('/api/items/:id', async (c) => { ... });
 // app.get('/api/items', async (c) => { ... });
 // app.post('/api/items/:id/versions', async (c) => { ... });

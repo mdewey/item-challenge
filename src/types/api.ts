@@ -9,7 +9,7 @@
  */
 export interface ApiError {
   error: string;
-  details?: string;
+  details?: string | string[];
 }
 
 /**
@@ -58,7 +58,7 @@ export const HttpStatus = {
 /**
  * Helper to create success response
  */
-export function successResponse<T>(body: T, statusCode = HttpStatus.OK): ApiResponse<T> {
+export function successResponse<T>(body: T, statusCode: 200 | 201 = HttpStatus.OK): ApiResponse<T> {
   return { statusCode, body };
 }
 
@@ -68,7 +68,7 @@ export function successResponse<T>(body: T, statusCode = HttpStatus.OK): ApiResp
 export function errorResponse(
   error: string,
   statusCode: number,
-  details?: string
+  details?: string | string[]
 ): ApiResponse<never> {
   return {
     statusCode,

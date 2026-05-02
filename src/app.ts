@@ -13,6 +13,7 @@ import { getItemHandler } from './handlers/getItem.js';
 import { createItemHandler } from './handlers/createItem.js';
 import { updateItemHandler } from './handlers/updateItem.js';
 import { listItemsHandler } from './handlers/listItems.js';
+import { createVersionHandler } from './handlers/createVersion.js';
 import { createHandlerContext } from './context.js';
 import { logger as appLogger } from './utils/logger.js';
 import { openApiSpec } from './openapi.js';
@@ -64,8 +65,13 @@ app.get('/api/items', async (c) => {
   return c.json(result.body, result.statusCode as 200 | 400 | 500);
 });
 
+app.post('/api/items/:id/versions', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const result = await createVersionHandler(c.req.param('id'), ctx);
+  return c.json(result.body, result.statusCode as 201 | 400 | 404 | 500);
+});
+
 // TODO: Add more routes as handlers are implemented
-// app.post('/api/items/:id/versions', async (c) => { ... });
 // app.get('/api/items/:id/audit', async (c) => { ... });
 
 // Health check

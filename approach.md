@@ -401,8 +401,6 @@ git remote -v
 # upstream  git@github.com:ascott1/item-challenge.git (fetch)
 ```
 
-**Branch strategy:** `solution/dewey-mark-may-2026`
-
 **Why:**
 
 - **Clean separation**: Original repo untouched

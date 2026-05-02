@@ -33,7 +33,7 @@ export class MemoryStorage implements ItemStorage {
   }
 
   async getItem(id: string): Promise<ExamItem | null> {
-    return this.items.get(id) || null;
+    return this.items.get(id) ?? null;
   }
 
   async updateItem(id: string, data: UpdateItemRequest): Promise<ExamItem | null> {
@@ -46,7 +46,7 @@ export class MemoryStorage implements ItemStorage {
       content: data.content ? { ...item.content, ...data.content } : item.content,
       metadata: {
         ...item.metadata,
-        ...(data.metadata || {}),
+        ...(data.metadata ?? {}),
         lastModified: Date.now(),
         version: item.metadata.version + 1,
       },
@@ -55,7 +55,7 @@ export class MemoryStorage implements ItemStorage {
     this.items.set(id, updated);
 
     // Save version history
-    const history = this.versions.get(id) || [];
+    const history = this.versions.get(id) ?? [];
     history.push({ ...updated });
     this.versions.set(id, history);
 
@@ -67,19 +67,19 @@ export class MemoryStorage implements ItemStorage {
 
     // Filter by subject
     if (query.subject) {
-      items = items.filter(item => item.subject === query.subject);
+      items = items.filter((item) => item.subject === query.subject);
     }
 
     // Filter by status
     if (query.status) {
-      items = items.filter(item => item.metadata.status === query.status);
+      items = items.filter((item) => item.metadata.status === query.status);
     }
 
     const total = items.length;
 
     // Pagination
-    const offset = query.offset || 0;
-    const limit = query.limit || 10;
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? 10;
     items = items.slice(offset, offset + limit);
 
     return { items, total };
@@ -101,7 +101,7 @@ export class MemoryStorage implements ItemStorage {
 
     this.items.set(id, newVersion);
 
-    const history = this.versions.get(id) || [];
+    const history = this.versions.get(id) ?? [];
     history.push({ ...newVersion });
     this.versions.set(id, history);
 
@@ -109,6 +109,6 @@ export class MemoryStorage implements ItemStorage {
   }
 
   async getAuditTrail(id: string): Promise<ExamItem[]> {
-    return this.versions.get(id) || [];
+    return this.versions.get(id) ?? [];
   }
 }

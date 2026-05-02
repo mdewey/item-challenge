@@ -220,6 +220,65 @@ Choose **either** CDK **or** Terraform and create infrastructure definitions.
 export USE_DYNAMODB=true
 export DYNAMODB_TABLE_NAME=ExamItems
 # For local DynamoDB: export DYNAMODB_ENDPOINT=http://localhost:8000
+```
+
+---
+
+## Solution Notes (Mark Dewey)
+
+### Running the Solution
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run dev server (http://localhost:3000)
+pnpm dev
+
+# Run tests
+pnpm test
+
+# Run tests with coverage
+pnpm test:coverage
+
+# Lint and type check
+pnpm check
+
+# Build Lambda bundle
+pnpm build:lambda
+```
+
+### Testing the API
+
+```bash
+# Health check
+curl http://localhost:3000/health
+
+# Get item (returns 404 for non-existent item)
+curl http://localhost:3000/api/items/550e8400-e29b-41d4-a716-446655440000
+
+# Invalid ID returns 400
+curl http://localhost:3000/api/items/not-a-uuid
+
+# Swagger UI
+open http://localhost:3000/docs
+```
+
+### Validating Terraform
+
+```bash
+cd terraform
+terraform init
+terraform validate
+terraform plan -var="environment=dev"
+```
+
+### What's Implemented
+
+- **GET /api/items/:id** - Complete with validation, error handling, tests
+- **Terraform infrastructure** - Lambda, API Gateway, DynamoDB, IAM, CloudWatch
+- **CI pipeline** - GitHub Actions for lint, test, build, terraform validate
+- **Testing** - 14 tests with Vitest
 
 pnpm dev
 ```

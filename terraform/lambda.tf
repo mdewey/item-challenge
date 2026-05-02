@@ -73,9 +73,9 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      NODE_ENV        = var.environment
-      DYNAMODB_TABLE  = aws_dynamodb_table.items.name
-      LOG_LEVEL       = var.environment == "prod" ? "info" : "debug"
+      NODE_ENV       = var.environment
+      DYNAMODB_TABLE = aws_dynamodb_table.items.name
+      LOG_LEVEL      = var.environment == "prod" ? "info" : "debug"
     }
   }
 

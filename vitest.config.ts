@@ -6,8 +6,25 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html"],
-      exclude: ["node_modules/", "dist/", "**/*.config.ts", "**/*.d.ts"],
+      reporter: ["text", "json", "html", "lcov"],
+      exclude: [
+        "node_modules/",
+        "dist/",
+        "terraform/",
+        "**/*.config.ts",
+        "**/*.config.js",
+        "**/*.d.ts",
+        "**/server.ts",
+        "**/lambda.ts",
+        "**/__tests__/**",
+      ],
+      // Optional: Enable thresholds to enforce minimum coverage
+      // thresholds: {
+      //   statements: 60,
+      //   branches: 60,
+      //   functions: 60,
+      //   lines: 60,
+      // },
     },
   },
 });

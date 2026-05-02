@@ -15,14 +15,7 @@
  */
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import {
-  DynamoDBDocumentClient,
-  PutCommand,
-  GetCommand,
-  UpdateCommand,
-  ScanCommand,
-  QueryCommand
-} from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
 import { ExamItem, CreateItemRequest, UpdateItemRequest, ListItemsQuery } from '../types/item.js';
 import { ItemStorage } from './interface.js';
@@ -33,12 +26,12 @@ export class DynamoDBStorage implements ItemStorage {
 
   constructor() {
     const dynamoClient = new DynamoDBClient({
-      region: process.env.AWS_REGION || 'us-east-1',
+      region: process.env.AWS_REGION ?? 'us-east-1',
       ...(process.env.DYNAMODB_ENDPOINT && { endpoint: process.env.DYNAMODB_ENDPOINT }),
     });
 
     this.client = DynamoDBDocumentClient.from(dynamoClient);
-    this.tableName = process.env.DYNAMODB_TABLE_NAME || 'ExamItems';
+    this.tableName = process.env.DYNAMODB_TABLE_NAME ?? 'ExamItems';
   }
 
   async createItem(data: CreateItemRequest): Promise<ExamItem> {
@@ -54,21 +47,25 @@ export class DynamoDBStorage implements ItemStorage {
       },
     };
 
-    await this.client.send(new PutCommand({
-      TableName: this.tableName,
-      Item: item,
-    }));
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item,
+      })
+    );
 
     return item;
   }
 
   async getItem(id: string): Promise<ExamItem | null> {
-    const result = await this.client.send(new GetCommand({
-      TableName: this.tableName,
-      Key: { id },
-    }));
+    const result = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { id },
+      })
+    );
 
-    return result.Item as ExamItem || null;
+    return (result.Item as ExamItem) || null;
   }
 
   async updateItem(id: string, data: UpdateItemRequest): Promise<ExamItem | null> {
@@ -81,16 +78,18 @@ export class DynamoDBStorage implements ItemStorage {
       content: data.content ? { ...existing.content, ...data.content } : existing.content,
       metadata: {
         ...existing.metadata,
-        ...(data.metadata || {}),
+        ...(data.metadata ?? {}),
         lastModified: Date.now(),
         version: existing.metadata.version + 1,
       },
     };
 
-    await this.client.send(new PutCommand({
-      TableName: this.tableName,
-      Item: updated,
-    }));
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: updated,
+      })
+    );
 
     return updated;
   }
@@ -98,22 +97,24 @@ export class DynamoDBStorage implements ItemStorage {
   async listItems(query: ListItemsQuery): Promise<{ items: ExamItem[]; total: number }> {
     // Note: This is a basic implementation using Scan
     // For production, you should use Query with appropriate indexes
-    const result = await this.client.send(new ScanCommand({
-      TableName: this.tableName,
-      Limit: query.limit || 10,
-    }));
+    const result = await this.client.send(
+      new ScanCommand({
+        TableName: this.tableName,
+        Limit: query.limit ?? 10,
+      })
+    );
 
-    const items = (result.Items || []) as ExamItem[];
-    return { items, total: result.Count || 0 };
+    const items = (result.Items ?? []) as ExamItem[];
+    return { items, total: result.Count ?? 0 };
   }
 
-  async createVersion(id: string): Promise<ExamItem | null> {
+  async createVersion(_id: string): Promise<ExamItem | null> {
     // TODO: Implement versioning strategy
     // Options: Separate versions table, same table with sort key, etc.
     throw new Error('Not implemented - define your versioning strategy');
   }
 
-  async getAuditTrail(id: string): Promise<ExamItem[]> {
+  async getAuditTrail(_id: string): Promise<ExamItem[]> {
     // TODO: Implement audit trail retrieval
     // This depends on your versioning strategy
     throw new Error('Not implemented - define your audit trail strategy');

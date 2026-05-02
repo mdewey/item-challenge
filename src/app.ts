@@ -14,6 +14,7 @@ import { createItemHandler } from './handlers/createItem.js';
 import { updateItemHandler } from './handlers/updateItem.js';
 import { listItemsHandler } from './handlers/listItems.js';
 import { createVersionHandler } from './handlers/createVersion.js';
+import { getAuditTrailHandler } from './handlers/getAuditTrail.js';
 import { createHandlerContext } from './context.js';
 import { logger as appLogger } from './utils/logger.js';
 import { openApiSpec } from './openapi.js';
@@ -71,8 +72,11 @@ app.post('/api/items/:id/versions', async (c) => {
   return c.json(result.body, result.statusCode as 201 | 400 | 404 | 500);
 });
 
-// TODO: Add more routes as handlers are implemented
-// app.get('/api/items/:id/audit', async (c) => { ... });
+app.get('/api/items/:id/audit', async (c) => {
+  const ctx = createHandlerContext(c.get('requestId'));
+  const result = await getAuditTrailHandler(c.req.param('id'), ctx);
+  return c.json(result.body, result.statusCode as 200 | 400 | 404 | 500);
+});
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));

@@ -23,7 +23,9 @@ export const openApiSpec = {
     '/api/items/{id}': {
       get: {
         summary: 'Get item by ID',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
         responses: {
           200: { description: 'Item found' },
           404: { description: 'Not found' },
@@ -31,7 +33,9 @@ export const openApiSpec = {
       },
       put: {
         summary: 'Update item',
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
         responses: {
           200: { description: 'Updated' },
           404: { description: 'Not found' },
@@ -43,7 +47,11 @@ export const openApiSpec = {
         summary: 'List items',
         parameters: [
           { name: 'subject', in: 'query', schema: { type: 'string' } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'review', 'approved', 'archived'] } },
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'string', enum: ['draft', 'review', 'approved', 'archived'] },
+          },
           { name: 'limit', in: 'query', schema: { type: 'integer', default: 10 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', default: 0 } },
         ],

@@ -112,11 +112,18 @@ global_secondary_index {
 
 **Versioning Strategy:**
 
-Each item update creates a version snapshot in the same table:
+Explicit versioning - snapshots are created only when `createVersion()` is called:
 
 - Current state: `pk=ITEM#id, sk=CURRENT`
-- Version history: `pk=ITEM#id, sk=VERSION#00001`, `VERSION#00002`, etc.
+- Version snapshots: `pk=ITEM#id, sk=VERSION#00001`, `VERSION#00002`, etc.
 - Zero-padded version numbers ensure lexicographic sorting
+
+| Operation         | Creates Snapshot?       | Increments Version? |
+| ----------------- | ----------------------- | ------------------- |
+| `updateItem()`    | ❌ No                    | ✅ Yes               |
+| `createVersion()` | ✅ Yes (then increments) | ✅ Yes               |
+
+This allows frequent edits without bloating audit trail - call `createVersion()` at milestones (before review, before publish, etc.).
 
 ## Infrastructure
 

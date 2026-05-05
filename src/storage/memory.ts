@@ -27,7 +27,8 @@ export class MemoryStorage implements ItemStorage {
     };
 
     this.items.set(item.id, item);
-    this.versions.set(item.id, [{ ...item }]);
+    // Explicit versioning: no auto-history on create
+    // Call createVersion() to snapshot before major changes
 
     return item;
   }
@@ -53,11 +54,8 @@ export class MemoryStorage implements ItemStorage {
     };
 
     this.items.set(id, updated);
-
-    // Save version history
-    const history = this.versions.get(id) ?? [];
-    history.push({ ...updated });
-    this.versions.set(id, history);
+    // Explicit versioning: no auto-history on update
+    // Call createVersion() to snapshot before major changes
 
     return updated;
   }
@@ -89,7 +87,12 @@ export class MemoryStorage implements ItemStorage {
     const item = this.items.get(id);
     if (!item) return null;
 
-    // Create a new version (copy of current state)
+    // Snapshot current state BEFORE incrementing version
+    const history = this.versions.get(id) ?? [];
+    history.push({ ...item });
+    this.versions.set(id, history);
+
+    // Increment version on current item
     const newVersion: ExamItem = {
       ...item,
       metadata: {
@@ -100,10 +103,6 @@ export class MemoryStorage implements ItemStorage {
     };
 
     this.items.set(id, newVersion);
-
-    const history = this.versions.get(id) ?? [];
-    history.push({ ...newVersion });
-    this.versions.set(id, history);
 
     return newVersion;
   }

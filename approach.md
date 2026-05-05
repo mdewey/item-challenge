@@ -391,16 +391,47 @@ ITEM#<uuid>            VERSION#00002        Snapshot at version 2
 
 **Access patterns mapped:**
 
-| Handler Query                  | DynamoDB Operation                           |
-| ------------------------------ | -------------------------------------------- |
-| `getItem(id)`                  | GetItem: `PK=ITEM#id, SK=CURRENT`            |
-| `updateItem(id)`               | UpdateItem + PutItem (version record)        |
-| `createVersion(id)`            | UpdateItem + PutItem (version record)        |
-| `getAuditTrail(id)`            | Query: `PK=ITEM#id, SK begins_with VERSION#` |
-| `listItems({subject})`         | Query SubjectIndex                           |
-| `listItems({status})`          | Query StatusIndex                            |
-| `listItems({subject, status})` | Query SubjectIndex with SK prefix            |
+| Handler Query                  | DynamoDB Operation                                |
+| ------------------------------ | ------------------------------------------------- |
+| `getItem(id)`                  | GetItem: `PK=ITEM#id, SK=CURRENT`                 |
+| `updateItem(id)`               | PutItem (CURRENT only, no snapshot)               |
+| `createVersion(id)`            | TransactWrite: PutItem snapshot + PutItem CURRENT |
+| `getAuditTrail(id)`            | Query: `PK=ITEM#id, SK begins_with VERSION#`      |
+| `listItems({subject})`         | Query SubjectIndex                                |
+| `listItems({status})`          | Query StatusIndex                                 |
+| `listItems({subject, status})` | Query SubjectIndex with SK prefix                 |
 
+---
+
+### Decision: Explicit Versioning Strategy
+
+**Requirement:** "Each time an item is updated (via /api/items/:id/versions), a new version record is created."
+
+**Interpretation:** Versioning is **explicit**, not automatic. Only `POST /api/items/:id/versions` creates audit trail snapshots.
+
+**Behavior:**
+
+| Operation         | Creates Snapshot?       | Increments Version? |
+| ----------------- | ----------------------- | ------------------- |
+| `updateItem()`    | ❌ No                    | ✅ Yes               |
+| `createVersion()` | ✅ Yes (then increments) | ✅ Yes               |
+
+**Why explicit over implicit:**
+
+- **Storage efficient** - Not every typo fix needs to be in audit trail
+- **Intentional milestones** - Snapshots represent meaningful states (ready for review, published, etc.)
+- **DynamoDB cost** - Fewer writes = lower WCU consumption
+- **Cleaner audit trail** - Reviewers see important versions, not every keystroke
+
+**Alternative considered:** Auto-snapshot on every `updateItem()`. Rejected because:
+
+- Storage grows unboundedly with frequent edits
+- Audit trail becomes noise (100 typo fixes vs. 3 milestones)
+- No way to distinguish "draft tweaks" from "ready for review"
+
+**Both storage implementations match this contract:** `MemoryStorage` and `DynamoDBStorage` use explicit versioning.
+
+---
 **GSI Consistency:**
 
 - GSIs are **eventually consistent** (milliseconds lag)

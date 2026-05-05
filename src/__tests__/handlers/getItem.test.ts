@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { getItemHandler } from '../handlers/getItem.js';
-import { TEST_UUID, TEST_UUID_2, createTestContext, createMockItem } from './helpers/testUtils.js';
+import { getItemHandler } from '../../handlers/getItem.js';
+import { TEST_UUID, TEST_UUID_2, createTestContext, createMockItem } from '../helpers/testUtils.js';
 
 describe('getItemHandler', () => {
   describe('successful retrieval', () => {

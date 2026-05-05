@@ -444,6 +444,88 @@ Adding it would require LocalStack setup for meaningful testing, which adds comp
 
 ---
 
+## GSI Scaling Strategies
+
+### Decision: Index-Per-Access-Pattern with Future Flexibility
+
+**Approach:** Start with two GSIs (SubjectIndex, StatusIndex) and document scaling strategies for additional query patterns.
+
+**Current GSIs:**
+
+| Access Pattern      | GSI          | Query                                     |
+| ------------------- | ------------ | ----------------------------------------- |
+| By subject          | SubjectIndex | `subject = X`                             |
+| By status           | StatusIndex  | `status = X`                              |
+| By subject + status | SubjectIndex | `subject = X, gsi1sk begins_with status#` |
+
+**Scaling Options for New Access Patterns:**
+
+**Option 1: Add More GSIs** (up to 20 per table)
+
+```hcl
+# Example: Query by author
+attribute {
+  name = "author"
+  type = "S"
+}
+
+attribute {
+  name = "gsi3sk"  # created#id for date ordering
+  type = "S"
+}
+
+global_secondary_index {
+  name            = "AuthorIndex"
+  hash_key        = "author"
+  range_key       = "gsi3sk"  # enables: author's items sorted by date
+  projection_type = "ALL"
+}
+```
+
+**Option 2: Overloaded GSI** (fewer indexes, more flexibility)
+
+```typescript
+// Use a generic "GSI3" that serves multiple purposes based on a type prefix
+gsi3pk: `AUTHOR#${author}` | `DIFFICULTY#${difficulty}` | `TYPE#${itemType}`
+gsi3sk: `${created}#${id}`
+```
+
+Query by author: `gsi3pk = AUTHOR#jsmith`
+Query by difficulty: `gsi3pk = DIFFICULTY#3`
+
+**Option 3: Composite Sort Keys** (combine filters without new GSI)
+
+```typescript
+// Encode multiple attributes in existing GSI sort key
+gsi1sk: `${status}#${difficulty}#${id}`  // Filter by status AND difficulty within subject
+```
+
+Query: `subject = AP Biology, gsi1sk begins_with approved#3#`
+
+**Trade-offs:**
+
+| Approach            | Pros                      | Cons                                           |
+| ------------------- | ------------------------- | ---------------------------------------------- |
+| New GSI per pattern | Fast queries, simple code | Storage cost × N, 20 GSI limit                 |
+| Overloaded GSI      | Fewer indexes             | More complex queries, can't combine patterns   |
+| Composite sort keys | No new indexes            | Only works for hierarchical filters            |
+| Filter expressions  | No schema changes         | Reads all data first, then filters (expensive) |
+
+**Recommended Next GSIs** (if needed):
+
+1. **AuthorIndex** - "Show me all items I created"
+2. **DifficultyIndex** - "Find easy questions for practice tests"
+3. **DateIndex** (lastModified) - "Items modified this week" (for review workflows)
+
+**When to choose each:**
+
+- **4+ patterns on same attributes** → Overloaded GSI
+- **Hierarchical filtering** (A > B > C) → Composite sort keys
+- **Independent dimensions** → Separate GSIs
+- **Rare queries** → Filter expressions (accept scan cost)
+
+---
+
 ## CI/CD Pipeline
 
 ### Decision: GitHub Actions with Branch Protection

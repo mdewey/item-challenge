@@ -61,6 +61,46 @@ Single-table design with composite primary key for items and version history:
 | List items by subject + status | Query SubjectIndex: `subject=X, sk begins_with status#` |
 | Pagination                     | Use `Limit` and `ExclusiveStartKey`                     |
 
+**GSI Scaling Strategies:**
+
+DynamoDB supports up to 20 GSIs per table. For additional access patterns beyond subject/status:
+
+| Strategy               | When to Use                     | Example                             |
+| ---------------------- | ------------------------------- | ----------------------------------- |
+| **New GSI**            | Independent query dimension     | AuthorIndex for "my items"          |
+| **Overloaded GSI**     | 4+ patterns on same attributes  | `gsi3pk = AUTHOR#x \| DIFFICULTY#3` |
+| **Composite Sort Key** | Hierarchical filtering          | `gsi1sk = status#difficulty#id`     |
+| **Filter Expression**  | Rare queries (accept scan cost) | Ad-hoc admin queries                |
+
+**Recommended future indexes:**
+
+```hcl
+# AuthorIndex - "Show me items I created"
+global_secondary_index {
+  name            = "AuthorIndex"
+  hash_key        = "author"      # metadata.author denormalized
+  range_key       = "gsi3sk"      # created#id for date ordering
+  projection_type = "ALL"
+}
+
+# DateIndex - "Items modified this week"
+global_secondary_index {
+  name            = "DateIndex"
+  hash_key        = "datePartition"  # YYYY-MM for hot partition avoidance
+  range_key       = "lastModified"
+  projection_type = "KEYS_ONLY"      # Sparse projection, fetch full item if needed
+}
+```
+
+**Trade-offs:**
+
+| Approach           | Pros                      | Cons                             |
+| ------------------ | ------------------------- | -------------------------------- |
+| More GSIs          | Fast queries, simple code | Storage cost × N, 20 limit       |
+| Overloaded GSI     | Fewer indexes             | Complex queries, can't combine   |
+| Composite SK       | No new indexes            | Hierarchical filters only        |
+| Filter expressions | No schema changes         | Reads all data first (expensive) |
+
 **Versioning Strategy:**
 
 Each item update creates a version snapshot in the same table:

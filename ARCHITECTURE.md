@@ -90,6 +90,15 @@ global_secondary_index {
   range_key       = "lastModified"
   projection_type = "KEYS_ONLY"      # Sparse projection, fetch full item if needed
 }
+
+# CurrentIndex - "List all current items" (sparse GSI)
+# Only CURRENT records have itemType attribute, so VERSION# snapshots are excluded
+global_secondary_index {
+  name            = "CurrentIndex"
+  hash_key        = "itemType"       # = "CURRENT" (sparse - only on current records)
+  range_key       = "pk"             # ITEM#id for uniqueness
+  projection_type = "ALL"
+}
 ```
 
 **Trade-offs:**

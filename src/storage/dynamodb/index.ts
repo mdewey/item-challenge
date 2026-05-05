@@ -15,8 +15,10 @@ import {
   PutCommand,
   GetCommand,
   QueryCommand,
+  ScanCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { randomUUID } from 'crypto';
 import {
   ExamItem,
@@ -146,6 +148,15 @@ export class DynamoDBStorage implements ItemStorage {
         new PutCommand({
           TableName: this.tableName,
           Item: record,
+          // Optimistic locking: only update if version hasn't changed
+          ConditionExpression: 'attribute_exists(pk) AND #metadata.#version = :expectedVersion',
+          ExpressionAttributeNames: {
+            '#metadata': 'metadata',
+            '#version': 'version',
+          },
+          ExpressionAttributeValues: {
+            ':expectedVersion': previousVersion,
+          },
         })
       );
 
@@ -156,6 +167,14 @@ export class DynamoDBStorage implements ItemStorage {
       });
       return updated;
     } catch (error) {
+      // Handle optimistic locking failure
+      if (error instanceof ConditionalCheckFailedException) {
+        this.logger.warn('Update conflict - item was modified by another request', {
+          id,
+          expectedVersion: previousVersion,
+        });
+        throw new Error(`Concurrent modification detected for item ${id}`, { cause: error });
+      }
       this.logger.error('Failed to update item', error as Error, { id });
       throw error;
     }
@@ -238,15 +257,18 @@ export class DynamoDBStorage implements ItemStorage {
   }
 
   private async listAll(limit: number): Promise<{ items: ExamItem[]; total: number }> {
-    // Note: Without a partition key, this would require a Scan
-    // In production, require at least one filter parameter
+    // Use Scan for unfiltered listing (expensive - consider requiring filters in production)
+    this.logger.warn(
+      'Using Scan for unfiltered listItems - consider requiring subject or status filter'
+    );
+
     const result = await this.client.send(
-      new QueryCommand({
+      new ScanCommand({
         TableName: this.tableName,
-        IndexName: INDEXES.SUBJECT,
+        // Only return CURRENT items, not VERSION# snapshots
+        FilterExpression: 'sk = :current',
+        ExpressionAttributeValues: { ':current': 'CURRENT' },
         Limit: limit,
-        KeyConditionExpression: 'subject = :any',
-        ExpressionAttributeValues: { ':any': 'AP Biology' },
       })
     );
 
@@ -298,6 +320,15 @@ export class DynamoDBStorage implements ItemStorage {
               Put: {
                 TableName: this.tableName,
                 Item: currentRecord,
+                // Optimistic locking: ensure version hasn't changed since we read it
+                ConditionExpression: '#metadata.#version = :expectedVersion',
+                ExpressionAttributeNames: {
+                  '#metadata': 'metadata',
+                  '#version': 'version',
+                },
+                ExpressionAttributeValues: {
+                  ':expectedVersion': currentVersion,
+                },
               },
             },
           ],

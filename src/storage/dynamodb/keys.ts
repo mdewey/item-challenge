@@ -55,17 +55,32 @@ export function toExamItem(record: DynamoDBRecord): ExamItem {
   return item;
 }
 
-/** Build a DynamoDB record with all keys */
+/**
+ * Build a DynamoDB record with appropriate keys.
+ *
+ * IMPORTANT: GSI keys are only added for CURRENT records, not VERSION# snapshots.
+ * This prevents historical versions from appearing in SubjectIndex/StatusIndex queries.
+ */
 export function buildRecord(item: ExamItem, sortKey: string): DynamoDBRecord {
-  return {
+  const baseRecord = {
     ...item,
     pk: pk(item.id),
     sk: sortKey,
-    subject: item.subject,
-    gsi1sk: gsi1sk(item.metadata.status, item.id),
-    status: item.metadata.status,
-    gsi2sk: gsi2sk(item.subject, item.id),
   };
+
+  // Only add GSI keys for CURRENT records (not VERSION# snapshots)
+  if (sortKey === CURRENT_SK) {
+    return {
+      ...baseRecord,
+      subject: item.subject,
+      gsi1sk: gsi1sk(item.metadata.status, item.id),
+      status: item.metadata.status,
+      gsi2sk: gsi2sk(item.subject, item.id),
+    };
+  }
+
+  // VERSION# records: no GSI keys (won't appear in index queries)
+  return baseRecord as DynamoDBRecord;
 }
 
 /** Version prefix for query expressions */

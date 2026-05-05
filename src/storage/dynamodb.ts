@@ -9,10 +9,5 @@
  *   └── client.ts  - DynamoDB client factory & config
  */
 
-export {
-  DynamoDBStorage,
-  DynamoDBRecord,
-  INDEXES,
-  DynamoDBConfig,
-  keys,
-} from './dynamodb/index.js';
+export { DynamoDBStorage, INDEXES, keys } from './dynamodb/index.js';
+export type { DynamoDBRecord, DynamoDBConfig } from './dynamodb/index.js';

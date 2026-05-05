@@ -19,7 +19,7 @@ export interface DynamoDBConfig {
  */
 export function getConfig(): DynamoDBConfig {
   return {
-    region: process.env.AWS_REGION ?? 'us-east-1',
+    region: process.env.AWS_REGION ?? 'us-east-2',
     endpoint: process.env.DYNAMODB_ENDPOINT,
     tableName: process.env.DYNAMODB_TABLE_NAME ?? 'ExamItems',
   };

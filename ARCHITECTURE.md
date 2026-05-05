@@ -263,6 +263,6 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
 1. **Complete DynamoDB storage** - Implement the interface for production use
 2. **Add authentication** - API Gateway authorizer with Cognito or JWT
 3. **Versioning table** - Separate table for audit trail with TTL
-4. **CI/CD pipeline** - GitHub Actions → Terraform Cloud or AWS CodePipeline
+4. **CI/CD pipeline** - Some sort of deployment pipeline (GitHub Actions, CodePipeline)
 5. **Monitoring** - CloudWatch alarms, X-Ray tracing
 6. **Multi-region** - Global tables for disaster recovery

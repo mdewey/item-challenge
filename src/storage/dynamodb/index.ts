@@ -382,6 +382,7 @@ export class DynamoDBStorage implements ItemStorage {
 }
 
 // Re-export types and utilities for convenience
-export { DynamoDBRecord, INDEXES } from './types.js';
-export { DynamoDBConfig } from './client.js';
+export type { DynamoDBRecord } from './types.js';
+export { INDEXES } from './types.js';
+export type { DynamoDBConfig } from './client.js';
 export * as keys from './keys.js';

@@ -6,13 +6,13 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createItemHandler } from '../handlers/createItem.js';
+import { createItemHandler } from '../../handlers/createItem.js';
 import {
   TEST_UUID,
   createTestContext,
   validCreateItemRequest,
   ValidationErrorBody,
-} from './helpers/testUtils.js';
+} from '../helpers/testUtils.js';
 
 describe('createItemHandler', () => {
   describe('successful creation', () => {

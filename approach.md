@@ -391,16 +391,47 @@ ITEM#<uuid>            VERSION#00002        Snapshot at version 2
 
 **Access patterns mapped:**
 
-| Handler Query                  | DynamoDB Operation                           |
-| ------------------------------ | -------------------------------------------- |
-| `getItem(id)`                  | GetItem: `PK=ITEM#id, SK=CURRENT`            |
-| `updateItem(id)`               | UpdateItem + PutItem (version record)        |
-| `createVersion(id)`            | UpdateItem + PutItem (version record)        |
-| `getAuditTrail(id)`            | Query: `PK=ITEM#id, SK begins_with VERSION#` |
-| `listItems({subject})`         | Query SubjectIndex                           |
-| `listItems({status})`          | Query StatusIndex                            |
-| `listItems({subject, status})` | Query SubjectIndex with SK prefix            |
+| Handler Query                  | DynamoDB Operation                                |
+| ------------------------------ | ------------------------------------------------- |
+| `getItem(id)`                  | GetItem: `PK=ITEM#id, SK=CURRENT`                 |
+| `updateItem(id)`               | PutItem (CURRENT only, no snapshot)               |
+| `createVersion(id)`            | TransactWrite: PutItem snapshot + PutItem CURRENT |
+| `getAuditTrail(id)`            | Query: `PK=ITEM#id, SK begins_with VERSION#`      |
+| `listItems({subject})`         | Query SubjectIndex                                |
+| `listItems({status})`          | Query StatusIndex                                 |
+| `listItems({subject, status})` | Query SubjectIndex with SK prefix                 |
 
+---
+
+### Decision: Explicit Versioning Strategy
+
+**Requirement:** "Each time an item is updated (via /api/items/:id/versions), a new version record is created."
+
+**Interpretation:** Versioning is **explicit**, not automatic. Only `POST /api/items/:id/versions` creates audit trail snapshots.
+
+**Behavior:**
+
+| Operation         | Creates Snapshot?       | Increments Version? |
+| ----------------- | ----------------------- | ------------------- |
+| `updateItem()`    | ❌ No                    | ✅ Yes               |
+| `createVersion()` | ✅ Yes (then increments) | ✅ Yes               |
+
+**Why explicit over implicit:**
+
+- **Storage efficient** - Not every typo fix needs to be in audit trail
+- **Intentional milestones** - Snapshots represent meaningful states (ready for review, published, etc.)
+- **DynamoDB cost** - Fewer writes = lower WCU consumption
+- **Cleaner audit trail** - Reviewers see important versions, not every keystroke
+
+**Alternative considered:** Auto-snapshot on every `updateItem()`. Rejected because:
+
+- Storage grows unboundedly with frequent edits
+- Audit trail becomes noise (100 typo fixes vs. 3 milestones)
+- No way to distinguish "draft tweaks" from "ready for review"
+
+**Both storage implementations match this contract:** `MemoryStorage` and `DynamoDBStorage` use explicit versioning.
+
+---
 **GSI Consistency:**
 
 - GSIs are **eventually consistent** (milliseconds lag)
@@ -441,6 +472,88 @@ async getItem(id: string): Promise<ExamItem | null> {
 ```
 
 Adding it would require LocalStack setup for meaningful testing, which adds complexity without demonstrating additional skills.
+
+---
+
+## GSI Scaling Strategies
+
+### Decision: Index-Per-Access-Pattern with Future Flexibility
+
+**Approach:** Start with two GSIs (SubjectIndex, StatusIndex) and document scaling strategies for additional query patterns.
+
+**Current GSIs:**
+
+| Access Pattern      | GSI          | Query                                     |
+| ------------------- | ------------ | ----------------------------------------- |
+| By subject          | SubjectIndex | `subject = X`                             |
+| By status           | StatusIndex  | `status = X`                              |
+| By subject + status | SubjectIndex | `subject = X, gsi1sk begins_with status#` |
+
+**Scaling Options for New Access Patterns:**
+
+**Option 1: Add More GSIs** (up to 20 per table)
+
+```hcl
+# Example: Query by author
+attribute {
+  name = "author"
+  type = "S"
+}
+
+attribute {
+  name = "gsi3sk"  # created#id for date ordering
+  type = "S"
+}
+
+global_secondary_index {
+  name            = "AuthorIndex"
+  hash_key        = "author"
+  range_key       = "gsi3sk"  # enables: author's items sorted by date
+  projection_type = "ALL"
+}
+```
+
+**Option 2: Overloaded GSI** (fewer indexes, more flexibility)
+
+```typescript
+// Use a generic "GSI3" that serves multiple purposes based on a type prefix
+gsi3pk: `AUTHOR#${author}` | `DIFFICULTY#${difficulty}` | `TYPE#${itemType}`
+gsi3sk: `${created}#${id}`
+```
+
+Query by author: `gsi3pk = AUTHOR#jsmith`
+Query by difficulty: `gsi3pk = DIFFICULTY#3`
+
+**Option 3: Composite Sort Keys** (combine filters without new GSI)
+
+```typescript
+// Encode multiple attributes in existing GSI sort key
+gsi1sk: `${status}#${difficulty}#${id}`  // Filter by status AND difficulty within subject
+```
+
+Query: `subject = AP Biology, gsi1sk begins_with approved#3#`
+
+**Trade-offs:**
+
+| Approach            | Pros                      | Cons                                           |
+| ------------------- | ------------------------- | ---------------------------------------------- |
+| New GSI per pattern | Fast queries, simple code | Storage cost × N, 20 GSI limit                 |
+| Overloaded GSI      | Fewer indexes             | More complex queries, can't combine patterns   |
+| Composite sort keys | No new indexes            | Only works for hierarchical filters            |
+| Filter expressions  | No schema changes         | Reads all data first, then filters (expensive) |
+
+**Recommended Next GSIs** (if needed):
+
+1. **AuthorIndex** - "Show me all items I created"
+2. **DifficultyIndex** - "Find easy questions for practice tests"
+3. **DateIndex** (lastModified) - "Items modified this week" (for review workflows)
+
+**When to choose each:**
+
+- **4+ patterns on same attributes** → Overloaded GSI
+- **Hierarchical filtering** (A > B > C) → Composite sort keys
+- **Independent dimensions** → Separate GSIs
+- **Rare queries** → Filter expressions (accept scan cost)
 
 ---
 
